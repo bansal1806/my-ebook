@@ -37,7 +37,7 @@ document.getElementById('btn-upload').addEventListener('click', () => {
     uploadSection.classList.remove('hidden');
     flipbookSection.classList.add('hidden');
     if (flipBook) {
-        flipBook.destroy();
+        try { flipBook.destroy(); } catch(e) {}
         flipbookEl.innerHTML = '';
         pdfDoc = null;
         window.currentPdfData = null;
@@ -83,29 +83,14 @@ async function handlePDF(file) {
         const totalPages = pdfDoc.numPages;
         totalPagesEl.textContent = totalPages;
 
-        // Optimized Rendering Loop: Render first 4 pages to show the book quickly
-        const initialPages = Math.min(4, totalPages);
-        
-        for (let i = 1; i <= initialPages; i++) {
+        // Render ALL pages first for maximum stability
+        for (let i = 1; i <= totalPages; i++) {
             await renderPage(i);
             updateProgress(i, totalPages);
         }
 
-        // Initialize flipbook session
+        // Initialize flipbook only after all pages are rendered
         initFlipbook();
-
-        // Background rendering for the rest of the pages
-        if (totalPages > initialPages) {
-            for (let i = initialPages + 1; i <= totalPages; i++) {
-                await renderPage(i);
-                updateProgress(i, totalPages);
-                
-                if (flipBook) {
-                    flipBook.updateFromHtml(document.querySelectorAll('.page'));
-                }
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-        }
 
     } catch (err) {
         console.error('Error loading PDF:', err);
@@ -121,8 +106,8 @@ async function renderPage(pageNum) {
 
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+    canvas.height = Math.round(viewport.height);
+    canvas.width = Math.round(viewport.width);
 
     await page.render({ canvasContext: context, viewport }).promise;
 
@@ -142,37 +127,42 @@ function initFlipbook() {
     flipbookSection.classList.remove('hidden');
 
     const pages = document.querySelectorAll('.page');
-    if (pages.length === 0) return; // Don't init if no pages rendered yet
+    if (pages.length === 0) return;
 
     // Adaptive sizing
     const isMobile = window.innerWidth <= 768;
     const width = isMobile ? window.innerWidth * 0.9 : 500;
     const height = isMobile ? (window.innerWidth * 0.9) * 1.4 : 700;
 
+    let currentPage = 0;
     if (flipBook) {
-        flipBook.destroy();
-        // DO NOT clear innerHTML here if we want to reuse the canvases on resize
+        try {
+            currentPage = flipBook.getCurrentPageIndex();
+            flipBook.destroy();
+        } catch (e) {
+            console.warn("Destroy failed", e);
+        }
     }
-
-    flipBook = new St.PageFlip(flipbookEl, {
-        width: Math.round(width),
-        height: Math.round(height),
-        size: "stretch",
-        minWidth: 315,
-        maxWidth: 1000,
-        minHeight: 420,
-        maxHeight: 1350,
-        maxShadowOpacity: 0.5,
-        showCover: true,
-        mobileScrollSupport: false,
-        usePortrait: isMobile,
-        startPage: flipBook ? flipBook.getCurrentPageIndex() : 0 // Preserve page on resize
-    });
-
+    
     try {
+        flipBook = new St.PageFlip(flipbookEl, {
+            width: Math.round(width),
+            height: Math.round(height),
+            size: "stretch",
+            minWidth: 315,
+            maxWidth: 1000,
+            minHeight: 420,
+            maxHeight: 1350,
+            maxShadowOpacity: 0.5,
+            showCover: pages.length > 2,
+            mobileScrollSupport: false,
+            usePortrait: isMobile,
+            startPage: currentPage
+        });
+
         flipBook.loadFromHTML(pages);
     } catch (e) {
-        console.error("Flipbook load error:", e);
+        console.error("Flipbook initialization failed:", e);
     }
 
     flipBook.on('flip', (e) => {
@@ -188,7 +178,7 @@ let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-        if (pdfDoc && flipBook) {
+        if (pdfDoc && document.querySelectorAll('.page').length > 0) {
             initFlipbook();
         }
     }, 500);
