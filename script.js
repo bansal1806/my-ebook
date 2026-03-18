@@ -80,13 +80,6 @@ async function handlePDF(file) {
             updateProgress(i, totalPages);
         }
 
-        // Stability: Add a blank page if odd
-        if (pageDataUrls.length % 2 !== 0) {
-            const blankCanvas = document.createElement('canvas');
-            blankCanvas.width = 10; blankCanvas.height = 10;
-            pageDataUrls.push(blankCanvas.toDataURL());
-        }
-
         initFlipbook();
     } catch (err) {
         console.error('PDF Error:', err);
@@ -121,7 +114,6 @@ function initFlipbook() {
         flipBook = null;
     }
 
-    // Stabilize the container: do NOT replace it, just clear content
     flipbookEl.innerHTML = '';
     pageDataUrls.forEach(url => {
         const div = document.createElement('div');
@@ -133,22 +125,24 @@ function initFlipbook() {
         flipbookEl.appendChild(div);
     });
 
+    // Use Portrait mode for ALL screen sizes initially to ensure stability
+    // This is the most "completely responsive" and rock-solid configuration
     const isMobile = window.innerWidth <= 768;
-    // Standard book dimensions
-    const w = 500;
-    const h = 700;
+    const w = isMobile ? window.innerWidth * 0.9 : 500;
+    const h = isMobile ? (window.innerWidth * 0.9) * 1.4 : 700;
 
     try {
         flipBook = new St.PageFlip(flipbookEl, {
-            width: w,
-            height: h,
-            size: "stretch", // Library will handle scaling automatically
+            width: Math.round(w),
+            height: Math.round(h),
+            size: "stretch",
             minWidth: 200, maxWidth: 1000,
             minHeight: 200, maxHeight: 1500,
-            showCover: true,
+            showCover: false, // Disabling cover for maximum stability
             mobileScrollSupport: false,
-            usePortrait: isMobile,
-            startPage: 0
+            usePortrait: true, // Force Single-Page mode for now
+            startPage: 0,
+            flippingTime: 800
         });
 
         flipBook.loadFromHTML(document.querySelectorAll('.page'));
@@ -162,16 +156,11 @@ function initFlipbook() {
     }
 }
 
-// STABILITY: Do NOT re-init on resize. 
-// Just let the "stretch" mode handle it. 
-// We only reload if the orientation changed significantly (mobile vs desktop).
-let lastIsMobile = window.innerWidth <= 768;
+// Simple resize handler - only re-init if the container size changes significantly
+let resizeTimeout;
 window.addEventListener('resize', () => {
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile !== lastIsMobile) {
-        lastIsMobile = isMobile;
-        if (pdfDoc) initFlipbook();
-    }
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => { if (pdfDoc) initFlipbook(); }, 500);
 });
 
 // Download
@@ -181,9 +170,7 @@ document.getElementById('btn-download').addEventListener('click', async () => {
     btn.textContent = "Zipping...";
     try {
         const zip = new JSZip();
-        // Use a clean version of the document outerHTML
-        const cleanHtml = document.documentElement.outerHTML.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gmi, "");
-        zip.file("index.html", `<!DOCTYPE html>${cleanHtml}<script src="script.js"></script>`);
+        zip.file("index.html", `<!DOCTYPE html>${document.documentElement.innerHTML}`);
         zip.file("styles.css", await (await fetch('styles.css')).text());
         zip.file("script.js", await (await fetch('script.js')).text());
         zip.file("book.pdf", window.currentPdfData);
