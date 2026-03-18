@@ -141,12 +141,21 @@ function initFlipbook() {
     loader.classList.add('hidden');
     flipbookSection.classList.remove('hidden');
 
-    const width = 500; 
-    const height = 700; 
+    // Adaptive sizing
+    const isMobile = window.innerWidth <= 768;
+    const width = isMobile ? window.innerWidth * 0.9 : 500;
+    const height = isMobile ? (window.innerWidth * 0.9) * 1.4 : 700;
+
+    if (flipBook) {
+        flipBook.destroy();
+        flipbookEl.innerHTML = '';
+        // Re-inject pages after destroy if needed, 
+        // but it's cleaner to just create a fresh instance
+    }
 
     flipBook = new St.PageFlip(flipbookEl, {
-        width: width,
-        height: height,
+        width: Math.round(width),
+        height: Math.round(height),
         size: "stretch",
         minWidth: 315,
         maxWidth: 1000,
@@ -154,7 +163,9 @@ function initFlipbook() {
         maxHeight: 1350,
         maxShadowOpacity: 0.5,
         showCover: true,
-        mobileScrollSupport: false
+        mobileScrollSupport: false,
+        usePortrait: isMobile, // Use single page on mobile
+        startPage: 0
     });
 
     flipBook.loadFromHTML(document.querySelectorAll('.page'));
@@ -166,6 +177,17 @@ function initFlipbook() {
     document.getElementById('btn-prev').onclick = () => flipBook.flipPrev();
     document.getElementById('btn-next').onclick = () => flipBook.flipNext();
 }
+
+// Handle window resize for perfect responsiveness
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        if (pdfDoc && flipBook) {
+            initFlipbook();
+        }
+    }, 500);
+});
 
 // "Download Ebook" feature
 document.getElementById('btn-download').addEventListener('click', async () => {

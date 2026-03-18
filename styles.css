@@ -234,3 +234,69 @@ footer {
     color: var(--text-muted);
     font-size: 0.85rem;
 }
+
+/* --- Responsive Design --- */
+
+@media (max-width: 768px) {
+    .app-container {
+        padding: 1rem;
+    }
+
+    header {
+        margin-bottom: 1.5rem;
+    }
+
+    .card {
+        padding: 2rem 1.5rem;
+    }
+
+    .upload-zone {
+        padding: 2rem 1rem;
+    }
+
+    .logo {
+        font-size: 1.25rem;
+    }
+
+    .flipbook-container {
+        gap: 1.5rem;
+    }
+
+    .flipbook-wrapper {
+        padding: 1rem;
+    }
+
+    .controls {
+        padding: 0.5rem 1.5rem;
+        gap: 1.5rem;
+    }
+
+    .btn {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .logo {
+        font-size: 1.1rem;
+    }
+
+    .actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
+    }
+
+    .upload-zone h2 {
+        font-size: 1.25rem;
+    }
+
+    .upload-zone p {
+        font-size: 0.85rem;
+    }
+}
