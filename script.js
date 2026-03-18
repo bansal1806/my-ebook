@@ -141,6 +141,9 @@ function initFlipbook() {
     loader.classList.add('hidden');
     flipbookSection.classList.remove('hidden');
 
+    const pages = document.querySelectorAll('.page');
+    if (pages.length === 0) return; // Don't init if no pages rendered yet
+
     // Adaptive sizing
     const isMobile = window.innerWidth <= 768;
     const width = isMobile ? window.innerWidth * 0.9 : 500;
@@ -148,9 +151,7 @@ function initFlipbook() {
 
     if (flipBook) {
         flipBook.destroy();
-        flipbookEl.innerHTML = '';
-        // Re-inject pages after destroy if needed, 
-        // but it's cleaner to just create a fresh instance
+        // DO NOT clear innerHTML here if we want to reuse the canvases on resize
     }
 
     flipBook = new St.PageFlip(flipbookEl, {
@@ -164,11 +165,15 @@ function initFlipbook() {
         maxShadowOpacity: 0.5,
         showCover: true,
         mobileScrollSupport: false,
-        usePortrait: isMobile, // Use single page on mobile
-        startPage: 0
+        usePortrait: isMobile,
+        startPage: flipBook ? flipBook.getCurrentPageIndex() : 0 // Preserve page on resize
     });
 
-    flipBook.loadFromHTML(document.querySelectorAll('.page'));
+    try {
+        flipBook.loadFromHTML(pages);
+    } catch (e) {
+        console.error("Flipbook load error:", e);
+    }
 
     flipBook.on('flip', (e) => {
         currentPageEl.textContent = e.data + 1;
