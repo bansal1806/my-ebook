@@ -9,12 +9,12 @@ const scale = 1.5;
 window.currentPdfData = null;
 let pageDataUrls = []; 
 
-// DOM Elements
+// DOM Elements (will be updated dynamically)
+let flipbookEl = document.getElementById('flipbook');
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const uploadSection = document.getElementById('upload-section');
 const flipbookSection = document.getElementById('flipbook-section');
-const flipbookEl = document.getElementById('flipbook');
 const loader = document.getElementById('loader');
 const progressEl = document.getElementById('progress');
 const currentPageEl = document.getElementById('current-page');
@@ -41,7 +41,6 @@ document.getElementById('btn-upload').addEventListener('click', () => {
         try { flipBook.destroy(); } catch(e) {}
         flipBook = null;
     }
-    flipbookEl.innerHTML = '';
     pageDataUrls = [];
     pdfDoc = null;
 });
@@ -63,7 +62,6 @@ async function handlePDF(file) {
     uploadSection.classList.add('hidden');
     loader.classList.remove('hidden');
     progressEl.textContent = '0%';
-    flipbookEl.innerHTML = '';
     pageDataUrls = [];
 
     try {
@@ -80,7 +78,7 @@ async function handlePDF(file) {
             updateProgress(i, totalPages);
         }
 
-        // Stability: Add a blank page if page count is odd (prevents landscape crashes)
+        // Stability: Enforce even pages for landscape mode
         if (pageDataUrls.length % 2 !== 0) {
             const blankCanvas = document.createElement('canvas');
             blankCanvas.width = 10; blankCanvas.height = 10;
@@ -116,12 +114,22 @@ async function initFlipbook() {
 
     if (pageDataUrls.length === 0) return;
 
-    // Preserve state
     let currentPage = flipBook ? flipBook.getCurrentPageIndex() : 0;
-    if (flipBook) { try { flipBook.destroy(); } catch(e) {} flipBook = null; }
 
-    // Clear and build DOM
-    flipbookEl.innerHTML = '';
+    // 1. COMPLETELY REPLACE CONTAINER FOR FRESH START
+    if (flipBook) {
+        try { flipBook.destroy(); } catch (e) {}
+        flipBook = null;
+    }
+    
+    const oldContainer = document.getElementById('flipbook');
+    const newContainer = document.createElement('div');
+    newContainer.id = 'flipbook';
+    newContainer.className = 'flipbook';
+    oldContainer.parentNode.replaceChild(newContainer, oldContainer);
+    flipbookEl = newContainer; // Update reference
+
+    // 2. BUILD NEW DOM
     pageDataUrls.forEach(url => {
         const div = document.createElement('div');
         div.className = 'page';
@@ -132,15 +140,16 @@ async function initFlipbook() {
         flipbookEl.appendChild(div);
     });
 
-    // Stability: Force container size before library calculation
+    // 3. FORCE SIZING
     const isMobile = window.innerWidth <= 768;
     const w = isMobile ? window.innerWidth * 0.95 : 500;
     const h = isMobile ? (window.innerWidth * 0.95) * 1.4 : 700;
     
     flipbookEl.style.width = Math.round(isMobile ? w : w * 2) + 'px';
     flipbookEl.style.height = Math.round(h) + 'px';
+    flipbookEl.style.display = 'block';
 
-    // Delay to let DOM settle
+    // 4. WAIT FOR LAYOUT AND INIT
     setTimeout(() => {
         try {
             flipBook = new St.PageFlip(flipbookEl, {
@@ -150,25 +159,28 @@ async function initFlipbook() {
                 minWidth: 200, maxWidth: 1000,
                 minHeight: 200, maxHeight: 1500,
                 showCover: true,
-                mobileScrollSupport: false,
                 usePortrait: isMobile,
-                startPage: currentPage
+                startPage: currentPage,
+                maxShadowOpacity: 0.5,
+                mobileScrollSupport: false
             });
-            flipBook.loadFromHTML(document.querySelectorAll('.page'));
+            
+            const pages = document.querySelectorAll('.page');
+            flipBook.loadFromHTML(pages);
             
             flipBook.on('flip', (e) => { currentPageEl.textContent = e.data + 1; });
             document.getElementById('btn-prev').onclick = () => flipBook.flipPrev();
             document.getElementById('btn-next').onclick = () => flipBook.flipNext();
         } catch (e) {
-            console.error("Final Init Attempt Failed:", e);
+            console.error("Flipbook Initialization Error:", e);
         }
-    }, 150);
+    }, 200); // Slightly longer delay
 }
 
 let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => { if (pdfDoc) initFlipbook(); }, 400);
+    resizeTimeout = setTimeout(() => { if (pdfDoc) initFlipbook(); }, 500);
 });
 
 // Download
