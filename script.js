@@ -96,16 +96,13 @@ async function handlePDF(file) {
 
         // Background rendering for the rest of the pages
         if (totalPages > initialPages) {
-            // We use a small delay between pages to keep the UI responsive
             for (let i = initialPages + 1; i <= totalPages; i++) {
                 await renderPage(i);
                 updateProgress(i, totalPages);
                 
-                // Update the flipbook library with new pages
                 if (flipBook) {
                     flipBook.updateFromHtml(document.querySelectorAll('.page'));
                 }
-                // Yield to the main thread briefly
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
