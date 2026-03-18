@@ -7,7 +7,7 @@ const scale = 1.5;
 
 // Global state
 window.currentPdfData = null;
-let pageDataUrls = []; // Store rendered pages as images for stability
+let pageDataUrls = []; 
 
 // DOM Elements
 const dropZone = document.getElementById('drop-zone');
@@ -44,7 +44,6 @@ document.getElementById('btn-upload').addEventListener('click', () => {
     flipbookEl.innerHTML = '';
     pageDataUrls = [];
     pdfDoc = null;
-    window.currentPdfData = null;
 });
 
 // Upload logic
@@ -81,9 +80,16 @@ async function handlePDF(file) {
             updateProgress(i, totalPages);
         }
 
+        // Stability: Add a blank page if page count is odd (prevents landscape crashes)
+        if (pageDataUrls.length % 2 !== 0) {
+            const blankCanvas = document.createElement('canvas');
+            blankCanvas.width = 10; blankCanvas.height = 10;
+            pageDataUrls.push(blankCanvas.toDataURL());
+        }
+
         initFlipbook();
     } catch (err) {
-        console.error('PDF Load Error:', err);
+        console.error('PDF Error:', err);
         alert('Error loading PDF.');
         uploadSection.classList.remove('hidden');
         loader.classList.add('hidden');
@@ -93,19 +99,15 @@ async function handlePDF(file) {
 async function renderPageToDataUrl(pageNum) {
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
-
     const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
     canvas.height = Math.round(viewport.height);
     canvas.width = Math.round(viewport.width);
-
-    await page.render({ canvasContext: context, viewport }).promise;
-    return canvas.toDataURL('image/jpeg', 0.8); // JPEG for better performance
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas.toDataURL('image/jpeg', 0.85);
 }
 
 function updateProgress(current, total) {
-    const progress = Math.round((current / total) * 100);
-    progressEl.textContent = `${progress}%`;
+    progressEl.textContent = `${Math.round((current / total) * 100)}%`;
 }
 
 async function initFlipbook() {
@@ -114,74 +116,64 @@ async function initFlipbook() {
 
     if (pageDataUrls.length === 0) return;
 
-    // Small delay to ensure container layout is ready
-    await new Promise(resolve => requestAnimationFrame(resolve));
-
+    // Preserve state
     let currentPage = flipBook ? flipBook.getCurrentPageIndex() : 0;
+    if (flipBook) { try { flipBook.destroy(); } catch(e) {} flipBook = null; }
 
-    if (flipBook) {
-        try { flipBook.destroy(); } catch (e) {}
-        flipBook = null;
-    }
-
-    // Re-create page elements from scratch (much more stable than reusing DOM strings)
+    // Clear and build DOM
     flipbookEl.innerHTML = '';
-    pageDataUrls.forEach((dataUrl, index) => {
-        const pageDiv = document.createElement('div');
-        pageDiv.className = 'page';
+    pageDataUrls.forEach(url => {
+        const div = document.createElement('div');
+        div.className = 'page';
         const img = document.createElement('img');
-        img.src = dataUrl;
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'contain';
-        pageDiv.appendChild(img);
-        flipbookEl.appendChild(pageDiv);
+        img.src = url;
+        img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'contain';
+        div.appendChild(img);
+        flipbookEl.appendChild(div);
     });
 
+    // Stability: Force container size before library calculation
     const isMobile = window.innerWidth <= 768;
-    const bookWidth = isMobile ? window.innerWidth * 0.95 : 500;
-    const bookHeight = isMobile ? (window.innerWidth * 0.95) * 1.4 : 700;
+    const w = isMobile ? window.innerWidth * 0.95 : 500;
+    const h = isMobile ? (window.innerWidth * 0.95) * 1.4 : 700;
+    
+    flipbookEl.style.width = Math.round(isMobile ? w : w * 2) + 'px';
+    flipbookEl.style.height = Math.round(h) + 'px';
 
-    try {
-        flipBook = new St.PageFlip(flipbookEl, {
-            width: Math.round(bookWidth),
-            height: Math.round(bookHeight),
-            size: "stretch",
-            minWidth: 200,
-            maxWidth: 1000,
-            minHeight: 300,
-            maxHeight: 1500,
-            maxShadowOpacity: 0.5,
-            showCover: pageDataUrls.length > 2,
-            mobileScrollSupport: false,
-            usePortrait: isMobile,
-            startPage: currentPage
-        });
-
-        flipBook.loadFromHTML(document.querySelectorAll('.page'));
-    } catch (e) {
-        console.error("Flipbook Init Failure:", e);
-    }
-
-    flipBook.on('flip', (e) => {
-        currentPageEl.textContent = e.data + 1;
-    });
-
-    document.getElementById('btn-prev').onclick = () => flipBook.flipPrev();
-    document.getElementById('btn-next').onclick = () => flipBook.flipNext();
+    // Delay to let DOM settle
+    setTimeout(() => {
+        try {
+            flipBook = new St.PageFlip(flipbookEl, {
+                width: Math.round(w),
+                height: Math.round(h),
+                size: "stretch",
+                minWidth: 200, maxWidth: 1000,
+                minHeight: 200, maxHeight: 1500,
+                showCover: true,
+                mobileScrollSupport: false,
+                usePortrait: isMobile,
+                startPage: currentPage
+            });
+            flipBook.loadFromHTML(document.querySelectorAll('.page'));
+            
+            flipBook.on('flip', (e) => { currentPageEl.textContent = e.data + 1; });
+            document.getElementById('btn-prev').onclick = () => flipBook.flipPrev();
+            document.getElementById('btn-next').onclick = () => flipBook.flipNext();
+        } catch (e) {
+            console.error("Final Init Attempt Failed:", e);
+        }
+    }, 150);
 }
 
 let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => {
-        if (pdfDoc && pageDataUrls.length > 0) initFlipbook();
-    }, 500);
+    resizeTimeout = setTimeout(() => { if (pdfDoc) initFlipbook(); }, 400);
 });
 
-// Download Logic
+// Download
 document.getElementById('btn-download').addEventListener('click', async () => {
-    if (!pdfDoc || !window.currentPdfData) { alert("Upload first!"); return; }
+    if (!window.currentPdfData) { alert("Upload first!"); return; }
     const btn = document.getElementById('btn-download');
     btn.textContent = "Zipping...";
     try {
@@ -191,6 +183,6 @@ document.getElementById('btn-download').addEventListener('click', async () => {
         zip.file("script.js", await (await fetch('script.js')).text());
         zip.file("book.pdf", window.currentPdfData);
         saveAs(await zip.generateAsync({type:"blob"}), "flipbook.zip");
-    } catch (err) { alert("Download failed!"); }
+    } catch (e) { alert("Download failed!"); }
     finally { btn.textContent = "Download Ebook"; }
 });
